@@ -206,10 +206,10 @@ class OpenGLVisualizer:
 
 if __name__ == '__main__':
 
-    print("Gibson: generating structure...")
-    generator = MegaStructureGenerator()
-    generator.generate_kowloon_style()
-    generator.save_structure('kowloon_structure.json')
+    # print("Gibson: generating structure...")
+    # generator = MegaStructureGenerator()
+    # generator.generate_kowloon_style()
+    # generator.save_structure('kowloon_structure.json')
     
     print("Gibson: starting visualization...")
     visualizer = OpenGLVisualizer(generator)
