@@ -1,6 +1,11 @@
 [![](https://img.shields.io/badge/gibson_1.0.0-passing-green)](https://github.com/gongahkia/gibson/releases/tag/1.0.0) 
 
+> [!WARNING]  
+> The visualisation module's specified configuration is for Windows machines running WSL2. Your mileage may vary.
+
 # `Gibson` 🗼
+
+> TODO add more
 
 ## Screenshot
 

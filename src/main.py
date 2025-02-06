@@ -147,12 +147,13 @@ class StructureVisualizer(Entity):
             )
 
 if __name__ == '__main__':
-    # Generate structure without visualization
+
+    print("Gibson: generating structure...")
     generator = MegaStructureGenerator()
     generator.generate_kowloon_style()
     generator.save_structure('kowloon_structure.json')
     
-    # Uncomment to visualize
-    # app = Ursina()
-    # visualizer = StructureVisualizer(generator)
-    # app.run()
+    print("Gibson: visualizing structure...")
+    app = Ursina()
+    visualizer = StructureVisualizer(generator)
+    app.run()
