@@ -27,6 +27,7 @@ class MegaStructureGenerator:
         self.support_map = np.zeros((size, size, layers), dtype=bool)
 
     def generate_kowloon_style(self):
+
         # Phase 1: Structural skeleton
         self._create_vertical_cores()
         self._generate_floor_slabs()
@@ -178,6 +179,56 @@ class MegaStructureGenerator:
                 start = random.choice(cores)
                 end = random.choice([c for c in cores if c != start])
                 self._build_bridge(start, end, y)
+
+    def _add_secondary_structures(self):
+        for _ in range(int(self.size * self.layers * 0.05)):  # Add 5% of total volume as secondary structures
+            x = random.randint(0, self.size-1)
+            z = random.randint(0, self.size-1)
+            y = random.randint(1, self.layers-1)
+            
+            if self.grid[x][z][y] == CellType.EMPTY and self._has_support(x, y, z):
+                structure_type = random.choice([CellType.HORIZONTAL, CellType.FACADE])
+                self.grid[x][z][y] = structure_type
+                
+                # Add some vertical extension
+                for dy in range(1, random.randint(1, 3)):
+                    if y + dy < self.layers and self.grid[x][z][y+dy] == CellType.EMPTY:
+                        self.grid[x][z][y+dy] = structure_type
+
+
+    def _add_support_pillars(self):
+        for x in range(self.size):
+            for z in range(self.size):
+                for y in range(1, self.layers):
+                    if self.grid[x][z][y] == CellType.HORIZONTAL and not self._has_support(x, y, z):
+                        # Add a vertical support pillar below the unsupported horizontal element
+                        for py in range(y-1, -1, -1):
+                            if self.grid[x][z][py] == CellType.EMPTY:
+                                self.grid[x][z][py] = CellType.VERTICAL
+                                self.support_map[x][z][py] = True
+                            else:
+                                break  # Stop if we hit a non-empty cell
+
+    def _connect_vertical_cores(self):
+        # Find all vertical cores
+        cores = [(x, z) for x in range(self.size) for z in range(self.size) 
+                if any(self.grid[x][z][y] == CellType.VERTICAL for y in range(self.layers))]
+        
+        # Connect cores with horizontal bridges at various heights
+        for y in range(2, self.layers, 3):  # Start at layer 2, every 3 layers
+            for i in range(len(cores)):
+                for j in range(i+1, len(cores)):
+                    if random.random() < 0.3:  # 30% chance to connect any two cores
+                        start = cores[i]
+                        end = cores[j]
+                        self._build_bridge(start, end, y)
+
+        # Add some vertical connections (stairs or elevators)
+        for x, z in cores:
+            for y in range(1, self.layers-1):
+                if self.grid[x][z][y] == CellType.VERTICAL:
+                    if random.random() < 0.2:  # 20% chance to add vertical connection
+                        self.grid[x][z][y] = CellType.STAIR
 
     def _build_bridge(self, start, end, y):
         # 3D Bresenham's line algorithm for bridge connections
@@ -422,6 +473,6 @@ if __name__ == '__main__':
     generator.generate_kowloon_style()
     generator.save_structure('kowloon_structure.json')
 
-    # print("Gibson: visualizing structure...")
-    # visualizer = IsometricVisualizer(generator)
-    # visualizer.run()
+    print("Gibson: visualizing structure...")
+    visualizer = IsometricVisualizer(generator)
+    visualizer.run()
