@@ -131,51 +131,84 @@ class IsometricVisualizer:
         gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 1000.0)
         glMatrixMode(GL_MODELVIEW)
 
-    def draw_cube(self, position):
+    def draw_cube(self, position, cell_type):
         x, y, z = position
         glPushMatrix()
         glTranslate(x, y, z)
         
-        # Simple cube using immediate mode
+        # Color mapping for different cell types
+        colors = {
+            CellType.EMPTY: (0.1, 0.1, 0.1),      # Dark Gray (almost black)
+            CellType.OCCUPIED: (0.8, 0.8, 0.8),   # Light Gray
+            CellType.VERTICAL: (0.2, 0.6, 0.8),   # Light Blue
+            CellType.HORIZONTAL: (0.8, 0.4, 0.2), # Orange
+            CellType.BRIDGE: (0.6, 0.8, 0.2)      # Lime Green
+        }
+        
+        # Set color based on cell type
+        glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))  # Default to white if type not found
+        
+        # Define cube vertices
+        vertices = [
+            (-0.4, -0.4, -0.4), ( 0.4, -0.4, -0.4), ( 0.4,  0.4, -0.4), (-0.4,  0.4, -0.4),
+            (-0.4, -0.4,  0.4), ( 0.4, -0.4,  0.4), ( 0.4,  0.4,  0.4), (-0.4,  0.4,  0.4)
+        ]
+        
+        # Define cube faces
+        faces = [
+            (0, 1, 2, 3), (3, 2, 6, 7), (7, 6, 5, 4),
+            (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7)
+        ]
+        
+        # Draw filled cube
         glBegin(GL_QUADS)
-        glColor3f(0.5, 0.5, 0.5)  # Default color
-        # Front face
-        glVertex3f(-0.4, -0.4, -0.4)
-        glVertex3f(0.4, -0.4, -0.4)
-        glVertex3f(0.4, 0.4, -0.4)
-        glVertex3f(-0.4, 0.4, -0.4)
-        # Back face
-        glVertex3f(-0.4, -0.4, 0.4)
-        glVertex3f(0.4, -0.4, 0.4)
-        glVertex3f(0.4, 0.4, 0.4)
-        glVertex3f(-0.4, 0.4, 0.4)
-        # ... add other faces ...
+        for face in faces:
+            for vertex in face:
+                glVertex3fv(vertices[vertex])
         glEnd()
+        
+        # Draw wireframe outline
+        glColor3f(0.0, 0.0, 0.0)  # Black color for wireframe
+        glLineWidth(1.0)  # Set line width
+        
+        glBegin(GL_LINES)
+        for edge in [(0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), (0,4), (1,5), (2,6), (3,7)]:
+            for vertex in edge:
+                glVertex3fv(vertices[vertex])
+        glEnd()
+        
         glPopMatrix()
 
     def render(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         
-        # Isometric camera setup
+        # Calculate the camera position
+        distance = max(self.generator.size, self.generator.layers) * 1.5
+        cam_x = distance * np.cos(np.radians(self.angle))
+        cam_z = distance * np.sin(np.radians(self.angle))
+        cam_y = distance * 0.5  # Adjust this value to change the camera height
+        
+        # Center of the structure
         center = (self.generator.size/2, self.generator.layers/2, self.generator.size/2)
+        
+        # Set up the camera
         gluLookAt(
-            self.generator.size, self.generator.layers, self.generator.size,  # Camera position
-            *center,  # Look at center
-            0, 1, 0   # Up vector
+            cam_x, cam_y, cam_z,  # Camera position
+            *center,              # Look at center
+            0, 1, 0               # Up vector
         )
         
-        glRotatef(35.264, 1, 0, 0)  # Isometric angle
-        glRotatef(self.angle, 0, 1, 0)
-
         # Draw all cubes
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
-                    if self.generator.grid[x][z][y] != CellType.EMPTY:
-                        self.draw_cube((x, y, z))
+                    cell_type = self.generator.grid[x][z][y]
+                    if cell_type != CellType.EMPTY:
+                        self.draw_cube((x, y, z), cell_type)
 
         pygame.display.flip()
+
 
     def run(self):
         clock = pygame.time.Clock()
