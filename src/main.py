@@ -1,10 +1,12 @@
-# main.py
 import json
 import random
+import sys
 import numpy as np
 from enum import Enum
 from noise import pnoise3
 from ursina import *
+from ursina.shaders import basic_lighting_shader
+from ursina.prefabs.line_renderer import LineRenderer  
 
 class CellType(Enum):
     EMPTY = 0
