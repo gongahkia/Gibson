@@ -1,10 +1,13 @@
-# main.py
 import json
 import random
+import sys
 import numpy as np
 from enum import Enum
 from noise import pnoise3
-from ursina import *
+import pygame
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
 
 class CellType(Enum):
     EMPTY = 0
@@ -103,48 +106,103 @@ class MegaStructureGenerator:
             self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
-class StructureVisualizer(Entity):
+class OpenGLVisualizer:
     def __init__(self, generator):
-        super().__init__()
         self.generator = generator
-        self._setup_camera()
-        self._build_mesh()
-    
-    def _setup_camera(self):
-        self.editor_camera = EditorCamera(
-            position=(20, 40, -50),
-            rotation_x=30,
-            fov=90
-        )
-        DirectionalLight().look_at(Vec3(1,-1,1))
+        self.rot_x = 30
+        self.rot_y = 45
+        self.pos_x = 0
+        self.pos_y = 0
+        self.pos_z = -30
+        self.init_pygame()
 
-    def _build_mesh(self):
-        color_map = {
-            CellType.VERTICAL: color.gray,
-            CellType.HORIZONTAL: color.blue,
-            CellType.BRIDGE: color.orange
+    def init_pygame(self):
+        pygame.init()
+        self.display = (1280, 720)
+        pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
+        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 100.0)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+        glLightfv(GL_LIGHT0, GL_POSITION,  (-40, 200, 100, 0.0))
+        glLightfv(GL_LIGHT0, GL_AMBIENT, (0.2, 0.2, 0.2, 1.0))
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
+        glEnable(GL_LIGHT0)
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
+
+    def draw_cube(self, position, cell_type):
+        x, y, z = position
+        glPushMatrix()
+        glTranslatef(x, y, z)
+        
+        colors = {
+            CellType.VERTICAL: (0.5, 0.5, 0.5),
+            CellType.HORIZONTAL: (0.2, 0.2, 1.0),
+            CellType.BRIDGE: (1.0, 0.5, 0.0),
+            CellType.OCCUPIED: (0.8, 0.8, 0.8)
         }
+        glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))
+        
+        glutSolidCube(0.8)
+        glPopMatrix()
 
+    def draw_connection(self, start, end):
+        glBegin(GL_LINES)
+        glColor3f(1.0, 0.0, 0.0)
+        glVertex3fv(start)
+        glVertex3fv(end)
+        glEnd()
+
+    def render(self):
+        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+        glLoadIdentity()
+        gluLookAt(
+            self.pos_x, self.pos_y, self.pos_z,
+            self.generator.size/2, self.generator.layers/2, self.generator.size/2,
+            0, 1, 0
+        )
+        glRotatef(self.rot_x, 1, 0, 0)
+        glRotatef(self.rot_y, 0, 1, 0)
+
+        # Draw all cells
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
                     cell = self.generator.grid[x][z][y]
                     if cell != CellType.EMPTY:
-                        Entity(
-                            parent=self,
-                            model='cube',
-                            position=(x,y,z),
-                            color=color_map.get(cell, color.white),
-                            texture='white_cube'
-                        )
+                        self.draw_cube((x, y, z), cell)
 
+        # Draw connections
         for connection in self.generator.connections:
-            Line(
-                parent=self,
-                points=[connection[0], connection[1]],
-                thickness=0.3,
-                color=color.red
-            )
+            start = (connection[0][0], connection[0][1], connection[0][2])
+            end = (connection[1][0], connection[1][1], connection[1][2])
+            self.draw_connection(start, end)
+
+    def run(self):
+        clock = pygame.time.Clock()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        pygame.quit()
+                        sys.exit()
+                    # Camera controls
+                    if event.key == pygame.K_w: self.pos_z += 1
+                    if event.key == pygame.K_s: self.pos_z -= 1
+                    if event.key == pygame.K_a: self.pos_x -= 1
+                    if event.key == pygame.K_d: self.pos_x += 1
+                    if event.key == pygame.K_q: self.pos_y += 1
+                    if event.key == pygame.K_e: self.pos_y -= 1
+                    if event.key == pygame.K_LEFT: self.rot_y -= 5
+                    if event.key == pygame.K_RIGHT: self.rot_y += 5
+                    if event.key == pygame.K_UP: self.rot_x -= 5
+                    if event.key == pygame.K_DOWN: self.rot_x += 5
+
+            self.render()
+            pygame.display.flip()
+            clock.tick(30)
 
 if __name__ == '__main__':
 
@@ -153,7 +211,6 @@ if __name__ == '__main__':
     generator.generate_kowloon_style()
     generator.save_structure('kowloon_structure.json')
     
-    print("Gibson: visualizing structure...")
-    app = Ursina()
-    visualizer = StructureVisualizer(generator)
-    app.run()
+    print("Gibson: starting visualization...")
+    visualizer = OpenGLVisualizer(generator)
+    visualizer.run()
