@@ -106,13 +106,6 @@ class MegaStructureGenerator:
             self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
-import pygame
-import sys
-import numpy as np
-from pygame.locals import *
-from OpenGL.GL import *
-from OpenGL.GLU import *
-
 class IsometricVisualizer:
     def __init__(self, generator):
         self.generator = generator
