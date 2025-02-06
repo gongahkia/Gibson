@@ -2,7 +2,7 @@
 
 # `Gibson` 🗼
 
-Single-file, [484-line](./src/main.py) megastructure generator and visualiser.
+[Single-file](./src/main.py), [484-line](./src/main.py) megastructure generator and visualiser.
 
 [Megastructure](https://en.wikipedia.org/wiki/Megastructure)s are randomly generated and serialised at `structure.json`.
 
