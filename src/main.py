@@ -9,12 +9,19 @@ from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
+from enum import Enum
+import numpy as np
+from noise import pnoise3
+import random
+import json
+
 class CellType(Enum):
     EMPTY = 0
-    OCCUPIED = 1
-    VERTICAL = 2
-    HORIZONTAL = 3
-    BRIDGE = 4
+    VERTICAL = 1    # Load-bearing walls
+    HORIZONTAL = 2  # Floor platforms
+    BRIDGE = 3      # Structural connections
+    FACADE = 4      # Non-load-bearing walls
+    STAIR = 5       # Vertical circulation
 
 class MegaStructureGenerator:
     def __init__(self, size=30, layers=15):
@@ -22,80 +29,200 @@ class MegaStructureGenerator:
         self.layers = layers
         self.grid = np.full((size, size, layers), CellType.EMPTY, dtype=object)
         self.connections = []
+        self.rooms = []
+        self.support_map = np.zeros((size, size, layers), dtype=bool)
 
     def generate_kowloon_style(self):
-        # Create vertical cores
-        for x in range(0, self.size, 5):
-            for z in range(0, self.size, 5):
-                if random.random() < 0.7:
-                    self._create_vertical_shaft(x, z)
+        # Phase 1: Structural skeleton
+        self._create_vertical_cores()
+        self._generate_floor_slabs()
         
-        # Add horizontal connections
-        for y in range(self.layers):
-            self._add_organic_connections(y)
-            
-        # Generate overhangs and bridges
-        self._create_overhangs()
+        # Phase 2: Spatial organization
+        self._create_room_clusters()
+        self._connect_vertical_cores()
+        
+        # Phase 3: Structural validation
+        self._ensure_structural_integrity()
+        self._add_support_pillars()
+        
+        # Phase 4: Organic growth
+        self._add_secondary_structures()
+        self._create_sky_bridges()
 
-    def _create_vertical_shaft(self, x, z):
-        height = random.randint(3, self.layers-1)
+    def _create_vertical_cores(self):
+        # Create primary load-bearing cores with staggered heights
+        core_spacing = random.randint(4, 6)
+        for x in range(0, self.size, core_spacing):
+            for z in range(0, self.size, core_spacing):
+                if random.random() < 0.8:
+                    height = min(random.randint(8, self.layers-2), self.layers)
+                    self._build_vertical_core(x, z, height)
+
+    def _build_vertical_core(self, x, z, height):
+        # Create core with random tapering
+        base_width = random.randint(2, 3)
         for y in range(height):
-            self.grid[x][z][y] = CellType.VERTICAL
-            if y > 0:
-                self.connections.append(((x, y-1, z), (x, y, z)))
+            current_width = max(1, base_width - int(y/4))
+            for dx in range(-current_width, current_width+1):
+                for dz in range(-current_width, current_width+1):
+                    nx, nz = x+dx, z+dz
+                    if 0 <= nx < self.size and 0 <= nz < self.size:
+                        self.grid[nx][nz][y] = CellType.VERTICAL
+                        self.support_map[nx][nz][y] = True
 
-    def _add_organic_connections(self, y):
-        scale = 0.1
-        for x in range(self.size):
-            for z in range(self.size):
-                if pnoise3(x*scale, y*scale, z*scale) > 0.5:
+    def _generate_floor_slabs(self):
+        # Create interconnected floor slabs with organic shapes
+        for y in range(self.layers):
+            noise_scale = 0.15
+            floor_thickness = random.randint(1, 2)
+            
+            for x in range(self.size):
+                for z in range(self.size):
                     if self.grid[x][z][y] == CellType.VERTICAL:
-                        self._expand_cluster(x, y, z)
+                        # Generate floor slabs around vertical cores
+                        if random.random() < 0.7:
+                            self._expand_floor(x, y, z, floor_thickness, noise_scale)
 
-    def _expand_cluster(self, x, y, z):
-        cluster_radius = 3
-        for dx in range(-cluster_radius, cluster_radius+1):
-            for dz in range(-cluster_radius, cluster_radius+1):
-                nx = x + dx
-                nz = z + dz
-                if 0 <= nx < self.size and 0 <= nz < self.size:
-                    if random.random() < 0.7 and self.grid[nx][nz][y] == CellType.EMPTY:
-                        self.grid[nx][nz][y] = CellType.HORIZONTAL
-                        self.connections.append(((x, y, z), (nx, y, nz)))
-
-    def _create_overhangs(self):
-        for _ in range(self.size//2):
-            x1, z1 = random.randint(0, self.size-1), random.randint(0, self.size-1)
-            x2, z2 = random.randint(0, self.size-1), random.randint(0, self.size-1)
-            y = random.randint(0, self.layers-2)
-            self._connect_points((x1,y,z1), (x2,y,z2))
-
-    def _connect_points(self, p1, p2):
-        dx = abs(p2[0] - p1[0])
-        dy = abs(p2[2] - p1[2])
-        dz = abs(p2[1] - p1[1])
+    def _expand_floor(self, x, y, z, thickness, noise_scale):
+        # Cellular automata approach for floor generation
+        queue = [(x, z)]
+        visited = set()
         
-        xs = 1 if p2[0] > p1[0] else -1
-        ys = 1 if p2[2] > p1[2] else -1
-        zs = 1 if p2[1] > p1[1] else -1
+        while queue:
+            cx, cz = queue.pop(0)
+            if (cx, cz) in visited:
+                continue
+                
+            visited.add((cx, cz))
+            
+            # Check structural support
+            if y > 0 and not self.support_map[cx][cz][y-1]:
+                continue
+                
+            noise_val = pnoise3(cx*noise_scale, y*0.2, cz*noise_scale)
+            if noise_val > -0.2:
+                for dy in range(thickness):
+                    if y+dy < self.layers:
+                        self.grid[cx][cz][y+dy] = CellType.HORIZONTAL
+                        self.support_map[cx][cz][y+dy] = True
+                
+                # Expand to neighbors
+                for dx, dz in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    nx, nz = cx+dx, cz+dz
+                    if 0 <= nx < self.size and 0 <= nz < self.size:
+                        queue.append((nx, nz))
 
-        current = list(p1)
-        for _ in range(dx + dy + dz):
-            last = list(current)
-            err = dx + dy + dz
-            if err - dx < dz:
-                current[1] += zs
-            if err - dy < dz:
-                current[0] += xs
-            if err - dz < dx:
-                current[2] += ys
-            self.grid[current[0]][current[2]][current[1]] = CellType.BRIDGE
-            self.connections.append((tuple(last), tuple(current)))
+    def _create_room_clusters(self):
+        # Define functional spaces with different sizes
+        room_types = [
+            {'size': (3,5), 'height': 2, 'type': CellType.HORIZONTAL},  # Residential
+            {'size': (5,8), 'height': 3, 'type': CellType.HORIZONTAL},  # Commercial
+            {'size': (2,4), 'height': 1, 'type': CellType.VERTICAL}     # Circulation
+        ]
+        
+        for _ in range(int(self.size**2 / 20)):
+            room = random.choice(room_types)
+            x = random.randint(0, self.size-1)
+            z = random.randint(0, self.size-1)
+            y = random.randint(0, self.layers-1)
+            
+            if self.grid[x][z][y] == CellType.HORIZONTAL:
+                self._carve_room(x, y, z, room)
+
+    def _carve_room(self, x, y, z, room):
+        # Create defined spaces with structural validation
+        width, depth = random.randint(*room['size']), random.randint(*room['size'])
+        height = room['height']
+        
+        for dx in range(width):
+            for dz in range(depth):
+                for dy in range(height):
+                    nx = x + dx
+                    nz = z + dz
+                    ny = y + dy
+                    
+                    if 0 <= nx < self.size and 0 <= nz < self.size and ny < self.layers:
+                        if dy == 0:  # Floor
+                            self.grid[nx][nz][ny] = CellType.HORIZONTAL
+                        else:        # Walls
+                            if dx in [0, width-1] or dz in [0, depth-1]:
+                                self.grid[nx][nz][ny] = CellType.FACADE
+                                
+                        self.support_map[nx][nz][ny] = True
+
+    def _ensure_structural_integrity(self):
+        # Gravity simulation and support validation
+        for y in range(1, self.layers):
+            for x in range(self.size):
+                for z in range(self.size):
+                    if self.grid[x][z][y] in [CellType.HORIZONTAL, CellType.FACADE]:
+                        if not self._has_support(x, y, z):
+                            # Remove unsupported elements
+                            self.grid[x][z][y] = CellType.EMPTY
+
+    def _has_support(self, x, y, z):
+        # Check vertical support or adjacent horizontal connections
+        if self.support_map[x][z][y-1]:
+            return True
+            
+        # Check for bridging support
+        for dx, dz in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nx, nz = x+dx, z+dz
+            if 0 <= nx < self.size and 0 <= nz < self.size:
+                if self.grid[nx][nz][y] in [CellType.HORIZONTAL, CellType.BRIDGE]:
+                    return True
+        return False
+
+    def _create_sky_bridges(self):
+        # Connect towers with proper bridging structures
+        for y in range(3, self.layers, 4):
+            cores = [(x, z) for x in range(self.size) 
+                    for z in range(self.size) 
+                    if self.grid[x][z][y] == CellType.VERTICAL]
+            
+            if len(cores) > 1:
+                start = random.choice(cores)
+                end = random.choice([c for c in cores if c != start])
+                self._build_bridge(start, end, y)
+
+    def _build_bridge(self, start, end, y):
+        # 3D Bresenham's line algorithm for bridge connections
+        x1, z1 = start
+        x2, z2 = end
+        dx = abs(x2 - x1)
+        dz = abs(z2 - z1)
+        
+        sx = 1 if x2 > x1 else -1
+        sz = 1 if z2 > z1 else -1
+        err = dx - dz
+        
+        while True:
+            if self._is_valid_bridge_point(x1, z1, y):
+                self.grid[x1][z1][y] = CellType.BRIDGE
+                self.grid[x1][z1][y+1] = CellType.BRIDGE  # Add height
+                
+            if x1 == x2 and z1 == z2:
+                break
+                
+            e2 = 2*err
+            if e2 > -dz:
+                err -= dz
+                x1 += sx
+            if e2 < dx:
+                err += dx
+                z1 += sz
+
+    def _is_valid_bridge_point(self, x, z, y):
+        # Check bridge foundation
+        if y > 0 and self.grid[x][z][y-1] in [CellType.VERTICAL, CellType.BRIDGE]:
+            return True
+        return False
 
     def save_structure(self, filename):
         data = {
             'grid': [[[cell.value for cell in col] for col in layer] for layer in self.grid],
-            'connections': self.connections
+            'connections': self.connections,
+            'rooms': self.rooms
         }
         with open(filename, 'w') as f:
             json.dump(data, f)
@@ -103,8 +230,10 @@ class MegaStructureGenerator:
     def load_structure(self, filename):
         with open(filename, 'r') as f:
             data = json.load(f)
-            self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
+            self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] 
+                                for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
+            self.rooms = data['rooms']
 
 class IsometricVisualizer:
     def __init__(self, generator):
