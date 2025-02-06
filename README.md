@@ -16,7 +16,10 @@
 
 ```console
 $ git clone XXX
-$ cd src/gibson
+$ cd src
+$ python3 -m venv gibson_env
+$ source gibson_env/bin/activate
+$ pip install -r requirements.txt
 ```
 
 ## Reference
