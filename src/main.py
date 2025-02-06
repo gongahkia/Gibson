@@ -107,97 +107,75 @@ class MegaStructureGenerator:
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
 import pygame
+import sys
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-class OpenGLVisualizer:
+class IsometricVisualizer:
     def __init__(self, generator):
         self.generator = generator
-        self.rot_x = 30
-        self.rot_y = 45
-        self.pos_x = 0
-        self.pos_y = 0
-        self.pos_z = -30
+        self.angle = 45  # Initial rotation angle
         self.init_pygame()
-        self.init_cube()
-
+        
     def init_pygame(self):
         pygame.init()
-        self.display = (1280, 720)
+        self.display = (800, 600)
         pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
-        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 100.0)
         glEnable(GL_DEPTH_TEST)
-        glEnable(GL_LIGHTING)
-        glLightfv(GL_LIGHT0, GL_POSITION,  (-40, 200, 100, 0.0))
-        glLightfv(GL_LIGHT0, GL_AMBIENT, (0.2, 0.2, 0.2, 1.0))
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
-        glEnable(GL_LIGHT0)
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
+        glClearColor(0.1, 0.1, 0.1, 1.0)
+        
+        # Set up orthographic projection for isometric view
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 1000.0)
+        glMatrixMode(GL_MODELVIEW)
 
-    def init_cube(self):
-        self.vertices = [
-            (-0.4, -0.4, -0.4), (0.4, -0.4, -0.4),
-            (0.4, 0.4, -0.4), (-0.4, 0.4, -0.4),
-            (-0.4, -0.4, 0.4), (0.4, -0.4, 0.4),
-            (0.4, 0.4, 0.4), (-0.4, 0.4, 0.4)
-        ]
-        self.faces = [
-            (0, 1, 2, 3), (3, 2, 6, 7), (7, 6, 5, 4),
-            (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7)
-        ]
-
-    def draw_cube(self, position, cell_type):
+    def draw_cube(self, position):
         x, y, z = position
-        colors = {
-            CellType.VERTICAL: (0.5, 0.5, 0.5),
-            CellType.HORIZONTAL: (0.2, 0.2, 1.0),
-            CellType.BRIDGE: (1.0, 0.5, 0.0),
-            CellType.OCCUPIED: (0.8, 0.8, 0.8)
-        }
         glPushMatrix()
-        glTranslatef(x, y, z)
-        glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))
+        glTranslate(x, y, z)
         
+        # Simple cube using immediate mode
         glBegin(GL_QUADS)
-        for face in self.faces:
-            for vertex in face:
-                glVertex3fv(self.vertices[vertex])
+        glColor3f(0.5, 0.5, 0.5)  # Default color
+        # Front face
+        glVertex3f(-0.4, -0.4, -0.4)
+        glVertex3f(0.4, -0.4, -0.4)
+        glVertex3f(0.4, 0.4, -0.4)
+        glVertex3f(-0.4, 0.4, -0.4)
+        # Back face
+        glVertex3f(-0.4, -0.4, 0.4)
+        glVertex3f(0.4, -0.4, 0.4)
+        glVertex3f(0.4, 0.4, 0.4)
+        glVertex3f(-0.4, 0.4, 0.4)
+        # ... add other faces ...
         glEnd()
-        
         glPopMatrix()
 
-    def draw_connection(self, start, end):
-        glBegin(GL_LINES)
-        glColor3f(1.0, 0.0, 0.0)
-        glVertex3fv(start)
-        glVertex3fv(end)
-        glEnd()
-
     def render(self):
-        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
+        
+        # Isometric camera setup
+        center = (self.generator.size/2, self.generator.layers/2, self.generator.size/2)
         gluLookAt(
-            self.pos_x, self.pos_y, self.pos_z,
-            self.generator.size/2, self.generator.layers/2, self.generator.size/2,
-            0, 1, 0
+            self.generator.size, self.generator.layers, self.generator.size,  # Camera position
+            *center,  # Look at center
+            0, 1, 0   # Up vector
         )
-        glRotatef(self.rot_x, 1, 0, 0)
-        glRotatef(self.rot_y, 0, 1, 0)
+        
+        glRotatef(35.264, 1, 0, 0)  # Isometric angle
+        glRotatef(self.angle, 0, 1, 0)
 
-        # Draw all cells
+        # Draw all cubes
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
-                    cell = self.generator.grid[x][z][y]
-                    if cell != CellType.EMPTY:
-                        self.draw_cube((x, y, z), cell)
+                    if self.generator.grid[x][z][y] != CellType.EMPTY:
+                        self.draw_cube((x, y, z))
 
-        # Draw connections
-        for connection in self.generator.connections:
-            start = (connection[0][0], connection[0][1], connection[0][2])
-            end = (connection[1][0], connection[1][1], connection[1][2])
-            self.draw_connection(start, end)
+        pygame.display.flip()
 
     def run(self):
         clock = pygame.time.Clock()
@@ -205,25 +183,14 @@ class OpenGLVisualizer:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    return
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        pygame.quit()
-                        return
-                    # Camera controls
-                    if event.key == pygame.K_w: self.pos_z += 1
-                    if event.key == pygame.K_s: self.pos_z -= 1
-                    if event.key == pygame.K_a: self.pos_x -= 1
-                    if event.key == pygame.K_d: self.pos_x += 1
-                    if event.key == pygame.K_q: self.pos_y += 1
-                    if event.key == pygame.K_e: self.pos_y -= 1
-                    if event.key == pygame.K_LEFT: self.rot_y -= 5
-                    if event.key == pygame.K_RIGHT: self.rot_y += 5
-                    if event.key == pygame.K_UP: self.rot_x -= 5
-                    if event.key == pygame.K_DOWN: self.rot_x += 5
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left click
+                        self.angle = (self.angle - 45) % 360
+                    elif event.button == 3:  # Right click
+                        self.angle = (self.angle + 45) % 360
 
             self.render()
-            pygame.display.flip()
             clock.tick(30)
 
 if __name__ == '__main__':
@@ -232,7 +199,6 @@ if __name__ == '__main__':
     generator = MegaStructureGenerator()
     generator.generate_kowloon_style()
     generator.save_structure('kowloon_structure.json')
-    
-    print("Gibson: starting visualization...")
-    visualizer = OpenGLVisualizer(generator)
+
+    visualizer = IsometricVisualizer(generator)
     visualizer.run()
