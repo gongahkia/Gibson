@@ -113,14 +113,22 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 
 class IsometricVisualizer:
+        
     def __init__(self, generator):
         self.generator = generator
-        self.angle = 45  # Initial rotation angle
-        self.font = pygame.font.Font(None, 24)
+        self.angle = 45
+        self._init_font_system()  
         self.debug_surface = pygame.Surface((200, 150))
         self.debug_surface.set_alpha(200)
         self.init_pygame()
-        
+
+    def _init_font_system(self):
+        if not pygame.font.get_init():
+            pygame.font.init()
+        self.font = pygame.font.Font(None, 24)
+        self.debug_surface = pygame.Surface((200, 150))
+        self.debug_surface.set_alpha(200)
+
     def init_pygame(self):
         pygame.init()
         self.display = (800, 600)
