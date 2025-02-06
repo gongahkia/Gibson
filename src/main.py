@@ -119,20 +119,29 @@ class IsometricVisualizer:
         self.angle = 45
         self.init_pygame()
         self._init_font_system()
-        self.debug_surface = pygame.Surface((200, 150), pygame.SRCALPHA)
+        self.debug_surface = pygame.Surface((200, 150), pygame.SRCALPHA).convert_alpha()
 
     def _init_font_system(self):
-        self.font = pygame.font.Font(None, 24)
+        pygame.font.init()  # Force initialize font module
+        try:
+            self.font = pygame.font.Font(None, 24)
+            # Test font rendering
+            test_surface = self.font.render("Test", True, (255, 255, 255))
+            if test_surface.get_width() == 0:
+                raise RuntimeError("Font rendering failed")
+        except Exception as e:
+            print(f"Font error: {e}")
+            self.font = pygame.font.SysFont('Arial', 24)
 
     def init_pygame(self):
         pygame.init()
         self.display = (800, 600)
         self.screen = pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
         glEnable(GL_DEPTH_TEST)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_BLEND)  # Enable blending
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  # Set blend function
         glClearColor(0.1, 0.1, 0.1, 1.0)
-        
+
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 1000.0)
@@ -181,7 +190,7 @@ class IsometricVisualizer:
         glPopMatrix()
 
     def render_debug_panel(self):
-        self.debug_surface.fill((50, 50, 50, 200))
+        self.debug_surface.fill((50, 50, 50, 180))  # Semi-transparent dark gray
         y_offset = 10
         
         legend_items = [
@@ -193,12 +202,12 @@ class IsometricVisualizer:
         
         for text, color in legend_items:
             pygame_color = [int(c * 255) for c in color]
-            text_surface = self.font.render(text, True, (255, 255, 255))
+            text_surface = self.font.render(text, True, (255, 255, 255))  # White text
             pygame.draw.rect(self.debug_surface, pygame_color, (10, y_offset, 20, 20))
             self.debug_surface.blit(text_surface, (40, y_offset))
             y_offset += 30
         
-        angle_text = self.font.render(f"Angle: {self.angle}°", True, (255, 255, 255))
+        angle_text = self.font.render(f"Angle: {self.angle}°", True, (255, 255, 255))  # White text
         self.debug_surface.blit(angle_text, (10, y_offset))
 
     def render(self):
@@ -221,7 +230,7 @@ class IsometricVisualizer:
                     if cell_type != CellType.EMPTY:
                         self.draw_cube((x, y, z), cell_type)
 
-        glDisable(GL_DEPTH_TEST)
+        # Switch to 2D mode
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
@@ -230,30 +239,49 @@ class IsometricVisualizer:
         glPushMatrix()
         glLoadIdentity()
 
+        # Disable depth testing and enable blending for 2D elements
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        # Render debug panel
         self.render_debug_panel()
+        
+        # Convert Pygame surface to OpenGL texture
+        tex_data = pygame.image.tostring(self.debug_surface, "RGBA", True)
         texture = glGenTextures(1)
         glBindTexture(GL_TEXTURE_2D, texture)
-        tex_data = pygame.image.tostring(self.debug_surface, "RGBA", True)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 200, 150, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_data)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 200, 150, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_data)
+
+        # Draw textured quad for debug panel
         glEnable(GL_TEXTURE_2D)
+        glColor4f(1, 1, 1, 1)  # Set color to white with full opacity
         glBegin(GL_QUADS)
-        glTexCoord2f(0, 0); glVertex2f(self.display[0]-200, 0)
-        glTexCoord2f(0, 1); glVertex2f(self.display[0]-200, 150)
-        glTexCoord2f(1, 1); glVertex2f(self.display[0], 150)
-        glTexCoord2f(1, 0); glVertex2f(self.display[0], 0)
+        glTexCoord2f(0, 1); glVertex2f(self.display[0]-200, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.display[0], 0)
+        glTexCoord2f(1, 0); glVertex2f(self.display[0], 150)
+        glTexCoord2f(0, 0); glVertex2f(self.display[0]-200, 150)
         glEnd()
         glDisable(GL_TEXTURE_2D)
+
+        # Clean up
         glDeleteTextures([texture])
 
+        # Switch back to 3D mode
         glMatrixMode(GL_PROJECTION)
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
         glPopMatrix()
+
+        # Re-enable depth testing and disable blending for 3D elements
         glEnable(GL_DEPTH_TEST)
-        
+        glDisable(GL_BLEND)
+
         pygame.display.flip()
+
+
 
     def run(self):
         clock = pygame.time.Clock()
