@@ -37,9 +37,9 @@ class MegaStructureGenerator:
         self.rooms = []
         self.support_map = np.zeros((size, size, layers), dtype=bool)
 
-    def generate_kowloon_style(self):
+    def generate_mega(self):
         """
-        generate a kowloon-style mega structure
+        generate a mega structure
         """
         self._create_vertical_cores()
         self._generate_floor_slabs()
@@ -477,8 +477,8 @@ class IsometricVisualizer:
 if __name__ == '__main__':
     print("Gibson: generating structure...")
     generator = MegaStructureGenerator()
-    generator.generate_kowloon_style()
-    generator.save_structure('kowloon_structure.json')
+    generator.generate_mega()
+    generator.save_structure('structure.json')
     print("Gibson: visualizing structure...")
     visualizer = IsometricVisualizer(generator)
     visualizer.run()
