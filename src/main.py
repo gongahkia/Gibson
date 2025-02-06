@@ -106,95 +106,30 @@ class MegaStructureGenerator:
             self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
-import pygame
-import sys
-from pygame.locals import *
-from OpenGL.GL import *
-from OpenGL.GLU import *
-
 class IsometricVisualizer:
-        
     def __init__(self, generator):
         self.generator = generator
         self.angle = 45
-        self._init_font_system()  
-        self.debug_surface = pygame.Surface((200, 150))
-        self.debug_surface.set_alpha(200)
-        self.init_pygame()
+        self.init_pygame()  # Initialize Pygame first
+        self._init_font_system()  # Then initialize fonts
+        self.debug_surface = pygame.Surface((200, 150), pygame.SRCALPHA)
 
     def _init_font_system(self):
-        if not pygame.font.get_init():
-            pygame.font.init()
         self.font = pygame.font.Font(None, 24)
-        self.debug_surface = pygame.Surface((200, 150))
-        self.debug_surface.set_alpha(200)
 
     def init_pygame(self):
         pygame.init()
         self.display = (800, 600)
         self.screen = pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
         glEnable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)  # Enable blending
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glClearColor(0.1, 0.1, 0.1, 1.0)
-        
-        # Set up orthographic projection for isometric view
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 1000.0)
-        glMatrixMode(GL_MODELVIEW)
-
-    def draw_cube(self, position, cell_type):
-        x, y, z = position
-        glPushMatrix()
-        glTranslate(x, y, z)
-        
-        # Color mapping for different cell types
-        colors = {
-            CellType.EMPTY: (0.1, 0.1, 0.1),      # Dark Gray (almost black)
-            CellType.OCCUPIED: (0.8, 0.8, 0.8),   # Light Gray
-            CellType.VERTICAL: (0.2, 0.6, 0.8),   # Light Blue
-            CellType.HORIZONTAL: (0.8, 0.4, 0.2), # Orange
-            CellType.BRIDGE: (0.6, 0.8, 0.2)      # Lime Green
-        }
-        
-        # Set color based on cell type
-        glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))  # Default to white if type not found
-        
-        # Define cube vertices
-        vertices = [
-            (-0.4, -0.4, -0.4), ( 0.4, -0.4, -0.4), ( 0.4,  0.4, -0.4), (-0.4,  0.4, -0.4),
-            (-0.4, -0.4,  0.4), ( 0.4, -0.4,  0.4), ( 0.4,  0.4,  0.4), (-0.4,  0.4,  0.4)
-        ]
-        
-        # Define cube faces
-        faces = [
-            (0, 1, 2, 3), (3, 2, 6, 7), (7, 6, 5, 4),
-            (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7)
-        ]
-        
-        # Draw filled cube
-        glBegin(GL_QUADS)
-        for face in faces:
-            for vertex in face:
-                glVertex3fv(vertices[vertex])
-        glEnd()
-        
-        # Draw wireframe outline
-        glColor3f(0.0, 0.0, 0.0)  # Black color for wireframe
-        glLineWidth(1.0)  # Set line width
-        
-        glBegin(GL_LINES)
-        for edge in [(0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), (0,4), (1,5), (2,6), (3,7)]:
-            for vertex in edge:
-                glVertex3fv(vertices[vertex])
-        glEnd()
-        
-        glPopMatrix()
 
     def render_debug_panel(self):
-        self.debug_surface.fill((50, 50, 50))
+        self.debug_surface.fill((50, 50, 50, 200))  # RGBA color
         y_offset = 10
         
-        # Render color legend
         legend_items = [
             ("Vertical", (0.2, 0.6, 0.8)),
             ("Horizontal", (0.8, 0.4, 0.2)),
@@ -208,47 +143,32 @@ class IsometricVisualizer:
             pygame.draw.rect(self.debug_surface, pygame_color, (10, y_offset, 20, 20))
             self.debug_surface.blit(text_surface, (40, y_offset))
             y_offset += 30
-        
-        # Render current angle
-        angle_text = f"Angle: {self.angle}°"
-        angle_surface = self.font.render(angle_text, True, (255, 255, 255))
-        self.debug_surface.blit(angle_surface, (10, y_offset))
-        
-        # Blit debug surface to main display
-        self.screen.blit(self.debug_surface, (self.display[0] - 210, 10))
+            
+        angle_text = self.font.render(f"Angle: {self.angle}°", True, (255, 255, 255))
+        self.debug_surface.blit(angle_text, (10, y_offset))
 
     def render(self):
+        # 3D rendering
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         
-        # Calculate the camera position
+        # Camera setup
         distance = max(self.generator.size, self.generator.layers) * 1.5
         cam_x = distance * np.cos(np.radians(self.angle))
         cam_z = distance * np.sin(np.radians(self.angle))
-        cam_y = distance * 0.5  # Adjust this value to change the camera height
-        
-        # Center of the structure
         center = (self.generator.size/2, self.generator.layers/2, self.generator.size/2)
         
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glLoadIdentity()
-
-        # Set up the camera
-        gluLookAt(
-            cam_x, cam_y, cam_z,  # Camera position
-            *center,              # Look at center
-            0, 1, 0               # Up vector
-        )
+        gluLookAt(cam_x, distance*0.5, cam_z, *center, 0, 1, 0)
         
-        # Draw all cubes
+        # Draw cubes
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
-                    cell_type = self.generator.grid[x][z][y]
-                    if cell_type != CellType.EMPTY:
-                        self.draw_cube((x, y, z), cell_type)
+                    if self.generator.grid[x][z][y] != CellType.EMPTY:
+                        self.draw_cube((x, y, z), self.generator.grid[x][z][y])
 
-        # Switch to 2D rendering for debug panel
+        # 2D debug overlay
+        glDisable(GL_DEPTH_TEST)  # Disable depth test for overlay
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
@@ -256,34 +176,33 @@ class IsometricVisualizer:
         glMatrixMode(GL_MODELVIEW)
         glPushMatrix()
         glLoadIdentity()
+
+        # Convert pygame surface to OpenGL texture
+        texture = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, texture)
+        tex_data = pygame.image.tostring(self.debug_surface, "RGBA", True)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 200, 150, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_data)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
         
-        # Render the debug panel
-        self.render_debug_panel()
-        
-        # Switch back to 3D rendering
+        # Draw textured quad
+        glEnable(GL_TEXTURE_2D)
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 0); glVertex2f(self.display[0]-200, 0)
+        glTexCoord2f(0, 1); glVertex2f(self.display[0]-200, 150)
+        glTexCoord2f(1, 1); glVertex2f(self.display[0], 150)
+        glTexCoord2f(1, 0); glVertex2f(self.display[0], 0)
+        glEnd()
+        glDisable(GL_TEXTURE_2D)
+        glDeleteTextures([texture])
+
+        # Restore 3D state
         glMatrixMode(GL_PROJECTION)
         glPopMatrix()
         glMatrixMode(GL_MODELVIEW)
         glPopMatrix()
+        glEnable(GL_DEPTH_TEST)
         
         pygame.display.flip()
-
-
-    def run(self):
-        clock = pygame.time.Clock()
-        while True:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Left click
-                        self.angle = (self.angle - 45) % 360
-                    elif event.button == 3:  # Right click
-                        self.angle = (self.angle + 45) % 360
-
-            self.render()
-            clock.tick(30)
 
 if __name__ == '__main__':
 
