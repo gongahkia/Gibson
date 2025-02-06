@@ -106,6 +106,11 @@ class MegaStructureGenerator:
             self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
+import pygame
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
 class OpenGLVisualizer:
     def __init__(self, generator):
         self.generator = generator
@@ -115,6 +120,7 @@ class OpenGLVisualizer:
         self.pos_y = 0
         self.pos_z = -30
         self.init_pygame()
+        self.init_cube()
 
     def init_pygame(self):
         pygame.init()
@@ -129,20 +135,36 @@ class OpenGLVisualizer:
         glEnable(GL_LIGHT0)
         glMaterialfv(GL_FRONT, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
 
+    def init_cube(self):
+        self.vertices = [
+            (-0.4, -0.4, -0.4), (0.4, -0.4, -0.4),
+            (0.4, 0.4, -0.4), (-0.4, 0.4, -0.4),
+            (-0.4, -0.4, 0.4), (0.4, -0.4, 0.4),
+            (0.4, 0.4, 0.4), (-0.4, 0.4, 0.4)
+        ]
+        self.faces = [
+            (0, 1, 2, 3), (3, 2, 6, 7), (7, 6, 5, 4),
+            (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7)
+        ]
+
     def draw_cube(self, position, cell_type):
         x, y, z = position
-        glPushMatrix()
-        glTranslatef(x, y, z)
-        
         colors = {
             CellType.VERTICAL: (0.5, 0.5, 0.5),
             CellType.HORIZONTAL: (0.2, 0.2, 1.0),
             CellType.BRIDGE: (1.0, 0.5, 0.0),
             CellType.OCCUPIED: (0.8, 0.8, 0.8)
         }
+        glPushMatrix()
+        glTranslatef(x, y, z)
         glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))
         
-        glutSolidCube(0.8)
+        glBegin(GL_QUADS)
+        for face in self.faces:
+            for vertex in face:
+                glVertex3fv(self.vertices[vertex])
+        glEnd()
+        
         glPopMatrix()
 
     def draw_connection(self, start, end):
@@ -183,11 +205,11 @@ class OpenGLVisualizer:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
-                    sys.exit()
+                    return
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         pygame.quit()
-                        sys.exit()
+                        return
                     # Camera controls
                     if event.key == pygame.K_w: self.pos_z += 1
                     if event.key == pygame.K_s: self.pos_z -= 1
@@ -206,10 +228,10 @@ class OpenGLVisualizer:
 
 if __name__ == '__main__':
 
-    # print("Gibson: generating structure...")
-    # generator = MegaStructureGenerator()
-    # generator.generate_kowloon_style()
-    # generator.save_structure('kowloon_structure.json')
+    print("Gibson: generating structure...")
+    generator = MegaStructureGenerator()
+    generator.generate_kowloon_style()
+    generator.save_structure('kowloon_structure.json')
     
     print("Gibson: starting visualization...")
     visualizer = OpenGLVisualizer(generator)
