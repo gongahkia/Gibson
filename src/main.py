@@ -1,3 +1,4 @@
+# main.py
 import json
 import random
 import sys
@@ -6,7 +7,7 @@ from enum import Enum
 from noise import pnoise3
 from ursina import *
 from ursina.shaders import basic_lighting_shader
-from ursina.prefabs.line_renderer import LineRenderer  
+from ursina.prefabs.line_renderer import LineRenderer
 
 class CellType(Enum):
     EMPTY = 0
@@ -29,12 +30,12 @@ class MegaStructureGenerator:
                 if random.random() < 0.7:
                     self._create_vertical_shaft(x, z)
         
-        # Add horizontal connections
+        # Add organic connections
         for y in range(self.layers):
             self._add_organic_connections(y)
             
-        # Generate overhangs and bridges
-        self._create_overhangs()
+        # Generate bridges
+        self._create_bridges()
 
     def _create_vertical_shaft(self, x, z):
         height = random.randint(3, self.layers-1)
@@ -47,11 +48,11 @@ class MegaStructureGenerator:
         scale = 0.1
         for x in range(self.size):
             for z in range(self.size):
-                if pnoise3(x*scale, y*scale, z*scale) > 0.5:
-                    if self.grid[x][z][y] == CellType.VERTICAL:
-                        self._expand_cluster(x, y, z)
+                if self.grid[x][z][y] == CellType.VERTICAL:
+                    if pnoise3(x*scale, y*scale, z*scale) > 0.5:
+                        self._expand_horizontal(x, y, z)
 
-    def _expand_cluster(self, x, y, z):
+    def _expand_horizontal(self, x, y, z):
         cluster_radius = 3
         for dx in range(-cluster_radius, cluster_radius+1):
             for dz in range(-cluster_radius, cluster_radius+1):
@@ -62,7 +63,7 @@ class MegaStructureGenerator:
                         self.grid[nx][nz][y] = CellType.HORIZONTAL
                         self.connections.append(((x, y, z), (nx, y, nz)))
 
-    def _create_overhangs(self):
+    def _create_bridges(self):
         for _ in range(self.size//2):
             x1, z1 = random.randint(0, self.size-1), random.randint(0, self.size-1)
             x2, z2 = random.randint(0, self.size-1), random.randint(0, self.size-1)
@@ -115,47 +116,63 @@ class StructureVisualizer(Entity):
     def _setup_camera(self):
         self.editor_camera = EditorCamera(
             position=(20, 40, -50),
-            rotation_x=30,
+            rotation=(30, 25, 0),
             fov=90
         )
-        DirectionalLight().look_at(Vec3(1,-1,1))
+        DirectionalLight(parent=self, shadows=True).look_at(Vec3(1,-1,1))
 
     def _build_mesh(self):
         color_map = {
-            CellType.VERTICAL: color.gray,
-            CellType.HORIZONTAL: color.blue,
+            CellType.OCCUPIED: color.gray,
+            CellType.VERTICAL: color.blue,
+            CellType.HORIZONTAL: color.green,
             CellType.BRIDGE: color.orange
         }
 
+        # Batch create main structure
+        positions = []
+        colors = []
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
                     cell = self.generator.grid[x][z][y]
                     if cell != CellType.EMPTY:
-                        Entity(
-                            parent=self,
-                            model='cube',
-                            position=(x,y,z),
-                            color=color_map.get(cell, color.white),
-                            texture='white_cube'
-                        )
+                        positions.append(Vec3(x,y,z))
+                        colors.append(color_map.get(cell, color.white))
 
+        self.mesh_entity = Entity(
+            parent=self,
+            model=Mesh(vertices=positions, colors=colors),
+            texture='white_cube',
+            shader=basic_lighting_shader
+        )
+
+        # Create connection lines
         for connection in self.generator.connections:
-            Line(
+            start = Vec3(*connection[0])
+            end = Vec3(*connection[1])
+            LineRenderer(
                 parent=self,
-                points=[connection[0], connection[1]],
+                points=[start, end],
+                color=color.red,
                 thickness=0.3,
-                color=color.red
+                mode='line'
             )
 
 if __name__ == '__main__':
-
-    print("Gibson: generating structure...")
+    # Generate structure (works headless)
     generator = MegaStructureGenerator()
     generator.generate_kowloon_style()
     generator.save_structure('kowloon_structure.json')
     
-    print("Gibson: visualizing structure...")
-    app = Ursina()
-    visualizer = StructureVisualizer(generator)
-    app.run()
+    # Visualization (only if not in WSL or with proper X server)
+    if 'linux' not in sys.platform or 'microsoft' not in open('/proc/version').read().lower():
+        app = Ursina(
+            title='Mega City Viewer',
+            size=(1280, 720),
+            vsync=True
+        )
+        visualizer = StructureVisualizer(generator)
+        app.run()
+    else:
+        print("Structure generated. Visualization skipped in WSL environment.")
