@@ -106,76 +106,182 @@ class MegaStructureGenerator:
             self.grid = np.array([[[CellType(cell) for cell in col] for col in layer] for layer in data['grid']])
             self.connections = [tuple(map(tuple, c)) for c in data['connections']]
 
-class OpenGLVisualizer:
+import pygame
+import sys
+import numpy as np
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
+class IsometricVisualizer:
     def __init__(self, generator):
         self.generator = generator
-        self.rot_x = 30
-        self.rot_y = 45
-        self.pos_x = 0
-        self.pos_y = 0
-        self.pos_z = -30
+        self.angle = 45
         self.init_pygame()
+        self._init_font_system()
+        self.debug_surface = pygame.Surface((200, 150), pygame.SRCALPHA).convert_alpha()
+
+    def _init_font_system(self):
+        pygame.font.init()  # Force initialize font module
+        try:
+            self.font = pygame.font.Font(None, 24)
+            # Test font rendering
+            test_surface = self.font.render("Test", True, (255, 255, 255))
+            if test_surface.get_width() == 0:
+                raise RuntimeError("Font rendering failed")
+        except Exception as e:
+            print(f"Font error: {e}")
+            self.font = pygame.font.SysFont('Arial', 24)
 
     def init_pygame(self):
         pygame.init()
-        self.display = (1280, 720)
-        pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
-        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 100.0)
+        self.display = (800, 600)
+        self.screen = pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
         glEnable(GL_DEPTH_TEST)
-        glEnable(GL_LIGHTING)
-        glLightfv(GL_LIGHT0, GL_POSITION,  (-40, 200, 100, 0.0))
-        glLightfv(GL_LIGHT0, GL_AMBIENT, (0.2, 0.2, 0.2, 1.0))
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
-        glEnable(GL_LIGHT0)
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, (0.5, 0.5, 0.5, 1.0))
+        glEnable(GL_BLEND)  # Enable blending
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)  # Set blend function
+        glClearColor(0.1, 0.1, 0.1, 1.0)
+
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45, (self.display[0]/self.display[1]), 0.1, 1000.0)
+        glMatrixMode(GL_MODELVIEW)
 
     def draw_cube(self, position, cell_type):
         x, y, z = position
         glPushMatrix()
-        glTranslatef(x, y, z)
+        glTranslate(x, y, z)
         
         colors = {
-            CellType.VERTICAL: (0.5, 0.5, 0.5),
-            CellType.HORIZONTAL: (0.2, 0.2, 1.0),
-            CellType.BRIDGE: (1.0, 0.5, 0.0),
-            CellType.OCCUPIED: (0.8, 0.8, 0.8)
+            CellType.EMPTY: (0.1, 0.1, 0.1),
+            CellType.OCCUPIED: (0.8, 0.8, 0.8),
+            CellType.VERTICAL: (0.2, 0.6, 0.8),
+            CellType.HORIZONTAL: (0.8, 0.4, 0.2),
+            CellType.BRIDGE: (0.6, 0.8, 0.2)
         }
+        
         glColor3fv(colors.get(cell_type, (1.0, 1.0, 1.0)))
         
-        glutSolidCube(0.8)
+        vertices = [
+            (-0.4, -0.4, -0.4), ( 0.4, -0.4, -0.4), ( 0.4,  0.4, -0.4), (-0.4,  0.4, -0.4),
+            (-0.4, -0.4,  0.4), ( 0.4, -0.4,  0.4), ( 0.4,  0.4,  0.4), (-0.4,  0.4,  0.4)
+        ]
+        
+        faces = [
+            (0, 1, 2, 3), (3, 2, 6, 7), (7, 6, 5, 4),
+            (4, 5, 1, 0), (1, 5, 6, 2), (4, 0, 3, 7)
+        ]
+        
+        glBegin(GL_QUADS)
+        for face in faces:
+            for vertex in face:
+                glVertex3fv(vertices[vertex])
+        glEnd()
+        
+        glColor3f(0.0, 0.0, 0.0)
+        glLineWidth(1.0)
+        
+        glBegin(GL_LINES)
+        for edge in [(0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), (0,4), (1,5), (2,6), (3,7)]:
+            for vertex in edge:
+                glVertex3fv(vertices[vertex])
+        glEnd()
+        
         glPopMatrix()
 
-    def draw_connection(self, start, end):
-        glBegin(GL_LINES)
-        glColor3f(1.0, 0.0, 0.0)
-        glVertex3fv(start)
-        glVertex3fv(end)
-        glEnd()
+    def render_debug_panel(self):
+        self.debug_surface.fill((50, 50, 50, 180))  # Semi-transparent dark gray
+        y_offset = 10
+        
+        legend_items = [
+            ("Vertical", (0.2, 0.6, 0.8)),
+            ("Horizontal", (0.8, 0.4, 0.2)),
+            ("Bridge", (0.6, 0.8, 0.2)),
+            ("Occupied", (0.8, 0.8, 0.8))
+        ]
+        
+        for text, color in legend_items:
+            pygame_color = [int(c * 255) for c in color]
+            text_surface = self.font.render(text, True, (255, 255, 255))  # White text
+            pygame.draw.rect(self.debug_surface, pygame_color, (10, y_offset, 20, 20))
+            self.debug_surface.blit(text_surface, (40, y_offset))
+            y_offset += 30
+        
+        angle_text = self.font.render(f"Angle: {self.angle}°", True, (255, 255, 255))  # White text
+        self.debug_surface.blit(angle_text, (10, y_offset))
 
     def render(self):
-        glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
-        gluLookAt(
-            self.pos_x, self.pos_y, self.pos_z,
-            self.generator.size/2, self.generator.layers/2, self.generator.size/2,
-            0, 1, 0
-        )
-        glRotatef(self.rot_x, 1, 0, 0)
-        glRotatef(self.rot_y, 0, 1, 0)
-
-        # Draw all cells
+        
+        distance = max(self.generator.size, self.generator.layers) * 1.5
+        cam_x = distance * np.cos(np.radians(self.angle))
+        cam_z = distance * np.sin(np.radians(self.angle))
+        cam_y = distance * 0.5
+        
+        center = (self.generator.size/2, self.generator.layers/2, self.generator.size/2)
+        
+        gluLookAt(cam_x, cam_y, cam_z, *center, 0, 1, 0)
+        
         for x in range(self.generator.size):
             for z in range(self.generator.size):
                 for y in range(self.generator.layers):
-                    cell = self.generator.grid[x][z][y]
-                    if cell != CellType.EMPTY:
-                        self.draw_cube((x, y, z), cell)
+                    cell_type = self.generator.grid[x][z][y]
+                    if cell_type != CellType.EMPTY:
+                        self.draw_cube((x, y, z), cell_type)
 
-        # Draw connections
-        for connection in self.generator.connections:
-            start = (connection[0][0], connection[0][1], connection[0][2])
-            end = (connection[1][0], connection[1][1], connection[1][2])
-            self.draw_connection(start, end)
+        # Switch to 2D mode
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.display[0], self.display[1], 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        # Disable depth testing and enable blending for 2D elements
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        # Render debug panel
+        self.render_debug_panel()
+        
+        # Convert Pygame surface to OpenGL texture
+        tex_data = pygame.image.tostring(self.debug_surface, "RGBA", True)
+        texture = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, texture)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 200, 150, 0, GL_RGBA, GL_UNSIGNED_BYTE, tex_data)
+
+        # Draw textured quad for debug panel
+        glEnable(GL_TEXTURE_2D)
+        glColor4f(1, 1, 1, 1)  # Set color to white with full opacity
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 1); glVertex2f(self.display[0]-200, 0)
+        glTexCoord2f(1, 1); glVertex2f(self.display[0], 0)
+        glTexCoord2f(1, 0); glVertex2f(self.display[0], 150)
+        glTexCoord2f(0, 0); glVertex2f(self.display[0]-200, 150)
+        glEnd()
+        glDisable(GL_TEXTURE_2D)
+
+        # Clean up
+        glDeleteTextures([texture])
+
+        # Switch back to 3D mode
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
+        # Re-enable depth testing and disable blending for 3D elements
+        glEnable(GL_DEPTH_TEST)
+        glDisable(GL_BLEND)
+
+        pygame.display.flip()
+
+
 
     def run(self):
         clock = pygame.time.Clock()
@@ -184,33 +290,22 @@ class OpenGLVisualizer:
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        pygame.quit()
-                        sys.exit()
-                    # Camera controls
-                    if event.key == pygame.K_w: self.pos_z += 1
-                    if event.key == pygame.K_s: self.pos_z -= 1
-                    if event.key == pygame.K_a: self.pos_x -= 1
-                    if event.key == pygame.K_d: self.pos_x += 1
-                    if event.key == pygame.K_q: self.pos_y += 1
-                    if event.key == pygame.K_e: self.pos_y -= 1
-                    if event.key == pygame.K_LEFT: self.rot_y -= 5
-                    if event.key == pygame.K_RIGHT: self.rot_y += 5
-                    if event.key == pygame.K_UP: self.rot_x -= 5
-                    if event.key == pygame.K_DOWN: self.rot_x += 5
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        self.angle = (self.angle - 45) % 360
+                    elif event.button == 3:
+                        self.angle = (self.angle + 45) % 360
 
             self.render()
-            pygame.display.flip()
             clock.tick(30)
 
 if __name__ == '__main__':
 
-    # print("Gibson: generating structure...")
-    # generator = MegaStructureGenerator()
-    # generator.generate_kowloon_style()
-    # generator.save_structure('kowloon_structure.json')
-    
-    print("Gibson: starting visualization...")
-    visualizer = OpenGLVisualizer(generator)
+    print("Gibson: generating structure...")
+    generator = MegaStructureGenerator()
+    generator.generate_kowloon_style()
+    generator.save_structure('kowloon_structure.json')
+
+    print("Gibson: visualizing structure...")
+    visualizer = IsometricVisualizer(generator)
     visualizer.run()
