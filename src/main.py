@@ -116,12 +116,15 @@ class IsometricVisualizer:
     def __init__(self, generator):
         self.generator = generator
         self.angle = 45  # Initial rotation angle
+        self.font = pygame.font.Font(None, 24)
+        self.debug_surface = pygame.Surface((200, 150))
+        self.debug_surface.set_alpha(200)
         self.init_pygame()
         
     def init_pygame(self):
         pygame.init()
         self.display = (800, 600)
-        pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
+        self.screen = pygame.display.set_mode(self.display, DOUBLEBUF|OPENGL)
         glEnable(GL_DEPTH_TEST)
         glClearColor(0.1, 0.1, 0.1, 1.0)
         
@@ -179,6 +182,33 @@ class IsometricVisualizer:
         
         glPopMatrix()
 
+    def render_debug_panel(self):
+        self.debug_surface.fill((50, 50, 50))
+        y_offset = 10
+        
+        # Render color legend
+        legend_items = [
+            ("Vertical", (0.2, 0.6, 0.8)),
+            ("Horizontal", (0.8, 0.4, 0.2)),
+            ("Bridge", (0.6, 0.8, 0.2)),
+            ("Occupied", (0.8, 0.8, 0.8))
+        ]
+        
+        for text, color in legend_items:
+            pygame_color = [int(c * 255) for c in color]
+            text_surface = self.font.render(text, True, (255, 255, 255))
+            pygame.draw.rect(self.debug_surface, pygame_color, (10, y_offset, 20, 20))
+            self.debug_surface.blit(text_surface, (40, y_offset))
+            y_offset += 30
+        
+        # Render current angle
+        angle_text = f"Angle: {self.angle}°"
+        angle_surface = self.font.render(angle_text, True, (255, 255, 255))
+        self.debug_surface.blit(angle_surface, (10, y_offset))
+        
+        # Blit debug surface to main display
+        self.screen.blit(self.debug_surface, (self.display[0] - 210, 10))
+
     def render(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
@@ -192,6 +222,9 @@ class IsometricVisualizer:
         # Center of the structure
         center = (self.generator.size/2, self.generator.layers/2, self.generator.size/2)
         
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glLoadIdentity()
+
         # Set up the camera
         gluLookAt(
             cam_x, cam_y, cam_z,  # Camera position
@@ -207,6 +240,24 @@ class IsometricVisualizer:
                     if cell_type != CellType.EMPTY:
                         self.draw_cube((x, y, z), cell_type)
 
+        # Switch to 2D rendering for debug panel
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.display[0], self.display[1], 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        
+        # Render the debug panel
+        self.render_debug_panel()
+        
+        # Switch back to 3D rendering
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+        
         pygame.display.flip()
 
 
