@@ -6,13 +6,20 @@ Single-file, [484-line](./src/main.py) megastructure generator and visualiser.
 
 [Megastructure](https://en.wikipedia.org/wiki/Megastructure)s are randomly generated and serialised at `structure.json`.
 
+Structures are visualised from an [isomteric](https://en.wikipedia.org/wiki/Isometric_projection) perspective.
+
+Clicking [`LMB`](https://en.wikipedia.org/wiki/Mouse_button) and [`RMB`](https://en.wikipedia.org/wiki/Mouse_button) rotates the structure 45° left and right respectively.
+
 ## Screenshot
 
-![](./asset/reference/)
-![](./asset/reference/)
-![](./asset/reference/)
-![](./asset/reference/)
-![](./asset/reference/)
+![](./asset/reference/1.png)
+![](./asset/reference/2.png)
+![](./asset/reference/3.png)
+![](./asset/reference/4.png)
+![](./asset/reference/5.png)
+![](./asset/reference/6.png)
+![](./asset/reference/7.png)
+![](./asset/reference/8.png)
 
 ## Usage
 
